@@ -1,51 +1,92 @@
 #include <WiFi.h>
-#include <WebSocketsServer.h>
+#include <WebSocketsClient.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-const char* ssid = "ESP32-HEALTH";
-const char* password = "12345678";
+// WIFI
+const char* ssid = "realme 9";
+const char* password = "dusandusan23";
 
-WebSocketsServer webSocket = WebSocketsServer(81);
+// SERVER
+const char* host = "10.15.225.187";
+const uint16_t port = 8080;
 
-const int ecgPin = 34;      // AD8232 OUTPUT → GPIO 34 (ADC)
-const int tempPin = 35;     // TMP36 → GPIO 35 (ADC)
+// ECG pins
+#define ECG_OUTPUT 32
+#define LO_MINUS 26
+#define LO_PLUS 27
 
-// TMP36 constants
-// 10mV per degree, 500mV offset
-float readTemperatureC() {
-  int raw = analogRead(tempPin);
-  float voltage = (raw / 4095.0) * 3.3;   // ESP32 ADC reference 3.3V
-  float tempC = (voltage - 0.5) * 100.0;  // TMP36 formula
-  return tempC;
-}
+// TEMP pin
+#define TEMP_PIN 4
 
-void onEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
-  if (type == WStype_CONNECTED) {
-    Serial.println("Client connected.");
+OneWire oneWire(TEMP_PIN);
+DallasTemperature sensors(&oneWire);
+
+WebSocketsClient webSocket;
+
+void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+
+  switch(type) {
+
+    case WStype_CONNECTED:
+      Serial.println("WebSocket connected");
+      break;
+
+    case WStype_DISCONNECTED:
+      Serial.println("WebSocket disconnected");
+      break;
+
   }
 }
 
 void setup() {
-  Serial.begin(115200);
 
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password);
+  Serial.begin(9600);
 
-  webSocket.begin();
-  webSocket.onEvent(onEvent);
+  pinMode(LO_MINUS, INPUT);
+  pinMode(LO_PLUS, INPUT);
 
-  Serial.println("Health Monitor Ready...");
+  sensors.begin();
+
+  // WIFI CONNECT
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi connected");
+
+  // WEBSOCKET CONNECT
+  webSocket.begin(host, port, "/");
+  webSocket.onEvent(webSocketEvent);
+
 }
 
 void loop() {
+
   webSocket.loop();
 
-  int ecg = analogRead(ecgPin);
-  float temp = readTemperatureC();
+  if ((digitalRead(LO_PLUS) == 1) || (digitalRead(LO_MINUS) == 1)) {
+    return;
+  }
 
-  // format: ECG:1234;TEMP:36.7
-  String data = "ECG:" + String(ecg) + ";TEMP:" + String(temp, 2);
+  int ecgValue = analogRead(ECG_OUTPUT);
 
-  webSocket.broadcastTXT(data);
+  sensors.requestTemperatures();
+  float temperature = sensors.getTempCByIndex(0);
 
-  delay(5); // ~200 Hz
+  // JSON format
+  String payload = "{";
+  payload += "\"ecg\":";
+  payload += ecgValue;
+  payload += ",\"temp\":";
+  payload += temperature;
+  payload += "}";
+
+  webSocket.sendTXT(payload);
+
+  delay(10);
 }
