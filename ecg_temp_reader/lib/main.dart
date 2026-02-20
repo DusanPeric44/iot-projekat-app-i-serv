@@ -1,25 +1,83 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:web_socket_channel/io.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:web_socket_channel/io.dart';
 
-void main() => runApp(HealthApp());
+import 'data/repositories/auth_repository.dart';
+import 'data/repositories/scan_repository.dart';
+import 'data/models/scan_session.dart';
+import 'features/auth/auth_provider.dart';
+import 'features/auth/login_screen.dart';
+import 'features/scans/scan_provider.dart';
+import 'ui/widgets/app_drawer.dart';
 
-class HealthApp extends StatelessWidget {
+void main() {
+  runApp(AppRoot());
+}
+
+class AppRoot extends StatelessWidget {
+  const AppRoot({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(debugShowCheckedModeBanner: false, home: HealthScreen());
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider(AuthRepository())),
+        ChangeNotifierProvider(create: (_) => ScanProvider(ScanRepository())),
+      ],
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: const SessionGate(),
+      ),
+    );
+  }
+}
+
+class SessionGate extends StatefulWidget {
+  const SessionGate({super.key});
+
+  @override
+  State<SessionGate> createState() => _SessionGateState();
+}
+
+class _SessionGateState extends State<SessionGate> {
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      final auth = context.read<AuthProvider>();
+      auth.loadSession().then((_) {
+        if (!mounted) return;
+        setState(() {
+          _ready = true;
+        });
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isLoggedIn) {
+      return const LoginScreen();
+    }
+    return HealthScreen();
   }
 }
 
 class HealthScreen extends StatefulWidget {
+  const HealthScreen({super.key});
   @override
-  _HealthScreenState createState() => _HealthScreenState();
+  HealthScreenState createState() => HealthScreenState();
 }
 
-class _HealthScreenState extends State<HealthScreen> {
+class HealthScreenState extends State<HealthScreen> {
   final channel = IOWebSocketChannel.connect("ws://10.15.225.187:8080");
-
   List<FlSpot> ecg = [];
   int index = 0;
   double temp = 0;
@@ -27,23 +85,15 @@ class _HealthScreenState extends State<HealthScreen> {
   @override
   void initState() {
     super.initState();
-
     channel.stream.listen((msg) {
       final data = jsonDecode(msg);
-
       final ecgVal = (data["ecg"] ?? 0).toDouble();
       final tempVal = (data["temp"] ?? 0).toDouble();
-
       setState(() {
         temp = tempVal;
-
-        // scale ECG nicely for chart
         double scaled = ecgVal / 4095 * 100;
-
         ecg.add(FlSpot(index.toDouble(), scaled));
         index++;
-
-        // keep last 200 samples
         if (ecg.length > 200) {
           ecg.removeAt(0);
         }
@@ -57,40 +107,55 @@ class _HealthScreenState extends State<HealthScreen> {
     super.dispose();
   }
 
+  Future<void> _saveScan() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.currentUser == null) return;
+    final samples = ecg.map((e) => e.y).toList();
+    final session = ScanSession(
+      id: 0,
+      userId: auth.currentUser!.id,
+      createdAt: DateTime.now(),
+      temperature: temp,
+      ecgSamples: samples,
+    );
+    final scanProvider = context.read<ScanProvider>();
+    await scanProvider.save(session);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Saved')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Telemedicine Health Monitor")),
-
+      appBar: AppBar(title: const Text("Telemedicine Health Monitor")),
+      drawer: const AppMenuDrawer(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _saveScan,
+        child: const Icon(Icons.save),
+      ),
       body: Column(
         children: [
-          SizedBox(height: 20),
-
+          const SizedBox(height: 20),
           Text(
             "Temperature: ${temp.toStringAsFixed(2)} °C",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-
-          SizedBox(height: 20),
-
+          const SizedBox(height: 20),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(12.0),
-
               child: LineChart(
                 LineChartData(
                   minX: ecg.isEmpty ? 0 : ecg.first.x,
                   maxX: ecg.isEmpty ? 200 : ecg.last.x,
-
                   minY: 0,
                   maxY: 100,
-
                   gridData: FlGridData(show: true),
-
                   titlesData: FlTitlesData(show: false),
-
                   borderData: FlBorderData(show: true),
-
                   lineBarsData: [
                     LineChartBarData(
                       spots: ecg,
