@@ -72,6 +72,9 @@ class _SessionGateState extends State<SessionGate> {
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
+
+  static const String routeName = '/health';
+
   @override
   HealthScreenState createState() => HealthScreenState();
 }

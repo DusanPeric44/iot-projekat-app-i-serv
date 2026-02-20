@@ -19,8 +19,16 @@ class AppMenuDrawer extends StatelessWidget {
             leading: const Icon(Icons.monitor_heart),
             title: const Text('Live Monitor'),
             onTap: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => HealthScreen()),
+              if (ModalRoute.of(context)?.settings.name ==
+                  HealthScreen.routeName) {
+                Navigator.of(context).pop();
+                return;
+              }
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => HealthScreen(),
+                  settings: RouteSettings(name: HealthScreen.routeName),
+                ),
               );
             },
           ),
@@ -28,8 +36,16 @@ class AppMenuDrawer extends StatelessWidget {
             leading: const Icon(Icons.list_alt),
             title: const Text('My Results'),
             onTap: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const ResultsScreen()),
+              if (ModalRoute.of(context)?.settings.name ==
+                  ResultsScreen.routeName) {
+                Navigator.of(context).pop();
+                return;
+              }
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ResultsScreen(),
+                  settings: RouteSettings(name: ResultsScreen.routeName),
+                ),
               );
             },
           ),

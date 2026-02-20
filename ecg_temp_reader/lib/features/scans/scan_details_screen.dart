@@ -7,6 +7,8 @@ class ScanDetailsScreen extends StatelessWidget {
   final ScanSession session;
   const ScanDetailsScreen({super.key, required this.session});
 
+  static String? get routeName => '/scan-details';
+
   @override
   Widget build(BuildContext context) {
     final spots = <FlSpot>[];
@@ -28,7 +30,9 @@ class ScanDetailsScreen extends StatelessWidget {
               child: LineChart(
                 LineChartData(
                   minX: 0,
-                  maxX: session.ecgSamples.isEmpty ? 0 : (session.ecgSamples.length - 1).toDouble(),
+                  maxX: session.ecgSamples.isEmpty
+                      ? 0
+                      : (session.ecgSamples.length - 1).toDouble(),
                   minY: 0,
                   maxY: 100,
                   gridData: FlGridData(show: true),
@@ -52,4 +56,3 @@ class ScanDetailsScreen extends StatelessWidget {
     );
   }
 }
-

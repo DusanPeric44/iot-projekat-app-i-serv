@@ -8,14 +8,16 @@ import 'scan_details_screen.dart';
 class ResultsScreen extends StatefulWidget {
   const ResultsScreen({super.key});
 
+  static const String routeName = '/results';
+
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
 }
 
 class _ResultsScreenState extends State<ResultsScreen> {
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void initState() {
+    super.initState();
     final auth = context.read<AuthProvider>();
     final provider = context.read<ScanProvider>();
     if (auth.currentUser != null) {
@@ -55,6 +57,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => ScanDetailsScreen(session: s),
+                          settings: RouteSettings(
+                            name: ScanDetailsScreen.routeName,
+                          ),
                         ),
                       );
                     },
