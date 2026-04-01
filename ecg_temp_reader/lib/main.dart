@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -12,7 +13,8 @@ import 'features/auth/login_screen.dart';
 import 'features/scans/scan_provider.dart';
 import 'ui/widgets/app_drawer.dart';
 
-void main() {
+Future main() async {
+  await dotenv.load(fileName: ".env");
   runApp(AppRoot());
 }
 
@@ -80,7 +82,7 @@ class HealthScreen extends StatefulWidget {
 }
 
 class HealthScreenState extends State<HealthScreen> {
-  final channel = IOWebSocketChannel.connect("ws://10.15.225.187:8080");
+  late IOWebSocketChannel channel;
   List<FlSpot> ecg = [];
   int index = 0;
   double temp = 0;
@@ -88,19 +90,23 @@ class HealthScreenState extends State<HealthScreen> {
   @override
   void initState() {
     super.initState();
+    channel = IOWebSocketChannel.connect(dotenv.env['WEBSOCKET_URL']!);
     channel.stream.listen((msg) {
-      final data = jsonDecode(msg);
-      final ecgVal = (data["ecg"] ?? 0).toDouble();
-      final tempVal = (data["temp"] ?? 0).toDouble();
-      setState(() {
-        temp = tempVal;
-        double scaled = ecgVal / 4095 * 100;
-        ecg.add(FlSpot(index.toDouble(), scaled));
-        index++;
-        if (ecg.length > 200) {
-          ecg.removeAt(0);
-        }
-      });
+      try {
+        final decoded = jsonDecode(msg);
+        if (decoded is! Map<String, dynamic>) return;
+        final ecgVal = (decoded["ecg"] ?? 0).toDouble();
+        final tempVal = (decoded["temp"] ?? 0).toDouble();
+        setState(() {
+          temp = tempVal;
+          double scaled = ecgVal / 4095 * 100;
+          ecg.add(FlSpot(index.toDouble(), scaled));
+          index++;
+          if (ecg.length > 12) {
+            ecg.removeAt(0);
+          }
+        });
+      } catch (_) {}
     });
   }
 
@@ -144,10 +150,15 @@ class HealthScreenState extends State<HealthScreen> {
           const SizedBox(height: 20),
           Text(
             "Temperature: ${temp.toStringAsFixed(2)} °C",
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: temp > 37 ? Colors.red : Colors.green,
+            ),
           ),
           const SizedBox(height: 20),
-          Expanded(
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.4,
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: LineChart(
@@ -171,6 +182,20 @@ class HealthScreenState extends State<HealthScreen> {
                 ),
               ),
             ),
+          ),
+          const SizedBox(height: 20),
+          Badge(
+            backgroundColor: Colors.green,
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            textStyle: TextStyle(fontSize: 20),
+            label: Text("Temperature is normal"),
+          ),
+          const SizedBox(height: 20),
+          Badge(
+            backgroundColor: Colors.red,
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            textStyle: TextStyle(fontSize: 20),
+            label: Text("Temperature is high"),
           ),
         ],
       ),
